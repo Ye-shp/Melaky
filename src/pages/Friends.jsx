@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import TopNav from '../components/TopNav';
 import { db } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { collection, doc, onSnapshot, query, setDoc, where } from 'firebase/firestore';
+import { collection, doc, documentId, getDocs, onSnapshot, query, where } from 'firebase/firestore';
 import { searchUsersByUsername, sendFriendRequest, acceptFriendRequest, declineFriendRequest } from '../services/friends';
 
 export default function Friends() {
@@ -11,6 +11,8 @@ export default function Friends() {
   const [results, setResults] = useState([]);
   const [incoming, setIncoming] = useState([]);
   const [outgoing, setOutgoing] = useState([]);
+  const [friendIds, setFriendIds] = useState([]);
+  const [friends, setFriends] = useState([]);
 
   // Live friend requests
   useEffect(() => {
@@ -19,13 +21,37 @@ export default function Friends() {
     const outgoingQ = query(collection(db, 'friendRequests'), where('fromUserId', '==', authUser.uid));
     const unsubIn = onSnapshot(incomingQ, (snap) => setIncoming(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
     const unsubOut = onSnapshot(outgoingQ, (snap) => setOutgoing(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
-    return () => { unsubIn(); unsubOut(); };
+    const unsubUser = onSnapshot(doc(db, 'users', authUser.uid), (snap) => {
+      const data = snap.data();
+      setFriendIds(Array.isArray(data?.friends) ? data.friends : []);
+    });
+    return () => { unsubIn(); unsubOut(); unsubUser(); };
   }, [authUser]);
+
+  // Load friend profiles when friendIds change
+  useEffect(() => {
+    (async () => {
+      if (!friendIds || friendIds.length === 0) { setFriends([]); return; }
+      const chunks = [];
+      for (let i = 0; i < friendIds.length; i += 10) chunks.push(friendIds.slice(i, i + 10));
+      const usersCol = collection(db, 'users');
+      const profiles = [];
+      for (const chunk of chunks) {
+        const q = query(usersCol, where(documentId(), 'in', chunk));
+        const snap = await getDocs(q);
+        snap.docs.forEach((d) => profiles.push({ id: d.id, ...d.data() }));
+      }
+      // Keep same order as friendIds if possible
+      profiles.sort((a, b) => friendIds.indexOf(a.id) - friendIds.indexOf(b.id));
+      setFriends(profiles);
+    })();
+  }, [friendIds]);
 
   const doSearch = async (e) => {
     e.preventDefault();
     const list = await searchUsersByUsername(search);
-    setResults(list);
+    const filtered = list.filter((u) => u.id !== authUser.uid && !friendIds.includes(u.id));
+    setResults(filtered);
   };
 
   const sendRequest = async (toUserId) => {
@@ -95,6 +121,27 @@ export default function Friends() {
               ))}
               {filteredOutgoing.length === 0 && <div className="text-sm text-gray-400">None</div>}
             </div>
+          </div>
+        </div>
+
+        <div className="bg-gray-800 rounded p-4">
+          <div className="font-semibold mb-2">Friends</div>
+          <div className="space-y-2">
+            {friends.map((u) => (
+              <div key={u.id} className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {u.profilePic ? (
+                    <img src={u.profilePic} alt="avatar" className="h-8 w-8 rounded-full" />
+                  ) : (
+                    <div className="h-8 w-8 rounded-full bg-gray-700 flex items-center justify-center text-gray-300 text-xs">
+                      {(u.username || u.email || 'U')[0].toUpperCase()}
+                    </div>
+                  )}
+                  <div className="text-gray-200">{u.username || u.email}</div>
+                </div>
+              </div>
+            ))}
+            {friends.length === 0 && <div className="text-sm text-gray-400">No friends yet</div>}
           </div>
         </div>
       </div>

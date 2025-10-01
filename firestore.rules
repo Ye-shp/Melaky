@@ -1,9 +1,9 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Users: users can read their own profile. Writes only by authenticated users.
+    // Users: authenticated users can read profiles (needed for search). Each user can write own doc.
     match /users/{uid} {
-      allow read: if request.auth != null && request.auth.uid == uid;
+      allow read: if request.auth != null;
       allow write: if request.auth != null && request.auth.uid == uid;
     }
 

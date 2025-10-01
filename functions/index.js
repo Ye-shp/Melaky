@@ -122,9 +122,14 @@ exports.recordAuthorizedPayment = functionsRegion.https.onCall(async (data, cont
     status: 'held',
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
-  // Increment pot amount on the challenge document
+  // Increment pot amount and track supporter for self-challenges
   const challengeRef = db.collection('challenges').doc(challengeId);
-  await challengeRef.set({ potAmount: admin.firestore.FieldValue.increment(amount) }, { merge: true });
+  const snap = await challengeRef.get();
+  const updates = { potAmount: admin.firestore.FieldValue.increment(amount) };
+  if (snap.exists && snap.data().type === 'self') {
+    updates.supporterIds = admin.firestore.FieldValue.arrayUnion(context.auth.uid);
+  }
+  await challengeRef.set(updates, { merge: true });
   return { txId: txRef.id };
 });
 

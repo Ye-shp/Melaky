@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import TopNav from '../components/TopNav';
 import { useAuth } from '../contexts/AuthContext';
 import { db, createPaymentIntent, getStripePublicKey, recordAuthorizedPayment } from '../firebase';
-import { addDoc, collection, doc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, doc, documentId, getDocs, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
 
@@ -18,6 +18,43 @@ export default function CreateChallenge() {
   const [stripePromise, setStripePromise] = useState(null);
   const [clientSecret, setClientSecret] = useState('');
   const [pendingChallengeDraft, setPendingChallengeDraft] = useState(null);
+  const [friendIds, setFriendIds] = useState([]);
+  const [friends, setFriends] = useState([]);
+  const [loadingFriends, setLoadingFriends] = useState(false);
+
+  // Load friend IDs from the current user's profile
+  React.useEffect(() => {
+    if (!authUser) return;
+    const unsub = onSnapshot(doc(db, 'users', authUser.uid), (snap) => {
+      const data = snap.data();
+      setFriendIds(Array.isArray(data?.friends) ? data.friends : []);
+    });
+    return () => unsub();
+  }, [authUser]);
+
+  // Load friend profiles when IDs change
+  React.useEffect(() => {
+    (async () => {
+      setLoadingFriends(true);
+      try {
+        if (!friendIds || friendIds.length === 0) { setFriends([]); return; }
+        const chunks = [];
+        for (let i = 0; i < friendIds.length; i += 10) chunks.push(friendIds.slice(i, i + 10));
+        const usersCol = collection(db, 'users');
+        const profiles = [];
+        for (const chunk of chunks) {
+          const q = query(usersCol, where(documentId(), 'in', chunk));
+          const snap = await getDocs(q);
+          snap.docs.forEach((d) => profiles.push({ id: d.id, ...d.data() }));
+        }
+        // Stable order matching friendIds
+        profiles.sort((a, b) => friendIds.indexOf(a.id) - friendIds.indexOf(b.id));
+        setFriends(profiles);
+      } finally {
+        setLoadingFriends(false);
+      }
+    })();
+  }, [friendIds]);
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -39,7 +76,7 @@ export default function CreateChallenge() {
           createdAt: serverTimestamp(),
         };
         await addDoc(collection(db, 'challenges'), challenge);
-        setMsg('Self-challenge created and active. Others can support.');
+        setMsg('Self-challenge created. Use the Support section on detail page to stake.');
       } else {
         // Friend challenge: create PaymentIntent for manual capture and present PaymentElement
         const pub = await getStripePublicKey();
@@ -86,8 +123,19 @@ export default function CreateChallenge() {
           </div>
           {type === 'friend' && (
             <div>
-              <label className="block text-sm mb-1">Friend userId</label>
-              <input value={targetId} onChange={(e) => setTargetId(e.target.value)} type="text" className="w-full px-3 py-2 bg-gray-800 rounded" placeholder="Enter friend's uid (placeholder UI)" required />
+              <label className="block text-sm mb-1">Select friend</label>
+              {loadingFriends ? (
+                <div className="text-sm text-gray-400">Loading friends…</div>
+              ) : friends.length > 0 ? (
+                <select value={targetId} onChange={(e) => setTargetId(e.target.value)} className="w-full px-3 py-2 bg-gray-800 rounded" required>
+                  <option value="" disabled>Select a friend…</option>
+                  {friends.map((u) => (
+                    <option key={u.id} value={u.id}>{u.username || u.email}</option>
+                  ))}
+                </select>
+              ) : (
+                <div className="text-sm text-gray-400">No friends found. Add friends first on the Friends page.</div>
+              )}
             </div>
           )}
           <div>

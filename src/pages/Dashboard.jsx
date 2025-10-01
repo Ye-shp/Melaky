@@ -1,11 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import TopNav from '../components/TopNav';
-import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { collection, doc, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { db } from '../firebase';
+import { useAuth } from '../contexts/AuthContext';
 import { Link } from 'react-router-dom';
 
 export default function Dashboard() {
+  const { authUser } = useAuth();
   const [all, setAll] = useState([]);
+  const [friendIds, setFriendIds] = useState([]);
   const [tab, setTab] = useState('mine');
 
   useEffect(() => {
@@ -16,9 +19,19 @@ export default function Dashboard() {
     return () => unsub();
   }, []);
 
+  // Load current user's friend ids for filtering
+  useEffect(() => {
+    if (!authUser) return;
+    const unsub = onSnapshot(doc(db, 'users', authUser.uid), (snap) => {
+      const data = snap.data();
+      setFriendIds(Array.isArray(data?.friends) ? data.friends : []);
+    });
+    return () => unsub();
+  }, [authUser]);
+
   const filtered = useMemo(() => {
-    if (tab === 'mine') return all.filter((c) => true);
-    if (tab === 'friends') return all.filter((c) => c.type === 'friend');
+    if (tab === 'mine') return all.filter((c) => c.challengerId === authUser?.uid || c.challengeeId === authUser?.uid);
+    if (tab === 'friends') return all.filter((c) => friendIds.includes(c.challengerId) || friendIds.includes(c.challengeeId));
     return all.filter((c) => c.type === 'self');
   }, [tab, all]);
 
