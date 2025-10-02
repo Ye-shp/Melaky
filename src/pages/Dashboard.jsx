@@ -40,6 +40,7 @@ export default function Dashboard() {
       <TopNav />
       <div className="mx-auto max-w-6xl px-4 py-6">
         <h1 className="text-2xl font-bold mb-4">Dashboard</h1>
+        {/* Onboarding banner removed; gating now enforces completion */}
         <div className="flex gap-2 mb-4">
           <button onClick={() => setTab('mine')} className={`px-3 py-1 rounded ${tab==='mine' ? 'bg-gray-700' : 'bg-gray-800'}`}>My Challenges</button>
           <button onClick={() => setTab('friends')} className={`px-3 py-1 rounded ${tab==='friends' ? 'bg-gray-700' : 'bg-gray-800'}`}>Friends’ Challenges</button>

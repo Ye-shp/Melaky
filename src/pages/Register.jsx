@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { db } from '../firebase';
+import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 
 export default function Register() {
   const { register } = useAuth();
@@ -10,14 +12,33 @@ export default function Register() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
 
   const onSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
-      await register({ email, password, username });
-      navigate('/');
+      const cred = await register({ email, password, username });
+      const suggestion = location.state?.createFromSuggestion;
+      if (suggestion) {
+        // Immediately create a self-challenge draft for the new user
+        const days = Number(suggestion.deadline) || 28;
+        const deadlineISO = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+        await addDoc(collection(db, 'challenges'), {
+          type: suggestion.type || 'self',
+          description: suggestion.description || '',
+          deadline: deadlineISO,
+          status: 'active',
+          challengerId: cred?.user?.uid,
+          challengeeId: null,
+          potAmount: 0,
+          supporterIds: [],
+          proofUrl: '',
+          createdAt: serverTimestamp(),
+        });
+      }
+      navigate('/app', { replace: true });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -46,7 +67,7 @@ export default function Register() {
           <button disabled={loading} className="w-full py-2 bg-blue-600 hover:bg-blue-500 rounded font-medium">{loading ? 'Loading…' : 'Create account'}</button>
         </form>
         <div className="mt-4 text-sm text-gray-300 text-center">
-          Already have an account? <Link to="/login" className="text-blue-400 hover:text-blue-300">Sign in</Link>
+          Already have an account? <Link to="/login" state={location.state} className="text-blue-400 hover:text-blue-300">Sign in</Link>
         </div>
       </div>
     </div>

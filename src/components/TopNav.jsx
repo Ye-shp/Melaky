@@ -22,7 +22,7 @@ export default function TopNav() {
           <div className="flex items-center gap-6">
             <div className="text-xl font-bold text-white">Melaky</div>
             <div className="hidden md:flex items-center gap-2">
-              <NavLink to="/" end className={({ isActive }) => `${linkBase} ${isActive ? linkActive : linkIdle}`}>Dashboard</NavLink>
+              <NavLink to="/app" end className={({ isActive }) => `${linkBase} ${isActive ? linkActive : linkIdle}`}>Dashboard</NavLink>
               <NavLink to="/friends" className={({ isActive }) => `${linkBase} ${isActive ? linkActive : linkIdle}`}>Friends</NavLink>
               <NavLink to="/create" className={({ isActive }) => `${linkBase} ${isActive ? linkActive : linkIdle}`}>Create</NavLink>
             </div>

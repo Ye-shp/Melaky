@@ -3,11 +3,13 @@ import TopNav from '../components/TopNav';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { db, cancelPaymentIntent, capturePaymentIntent, markTransactionRefunded, markTransactionReleased, finalizeSelfChallenge } from '../firebase';
-import { collection, deleteDoc, doc, getDoc, httpsCallable, setDoc, updateDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage';
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
 import { createPaymentIntent, getStripePublicKey, recordAuthorizedPayment } from '../firebase';
+import ProgressFeed from '../components/ProgressFeed';
+import { addProgressReport } from '../services/progressService';
 
 export default function ChallengeDetail() {
   const { id } = useParams();
@@ -20,6 +22,9 @@ export default function ChallengeDetail() {
   const [supporting, setSupporting] = useState(false);
   const [stripePromise, setStripePromise] = useState(null);
   const [clientSecret, setClientSecret] = useState('');
+  const [progressText, setProgressText] = useState('');
+  const [progressLink, setProgressLink] = useState('');
+  const [progressFile, setProgressFile] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -58,7 +63,7 @@ export default function ChallengeDetail() {
   const approveProof = async () => {
     if (!challenge?.paymentIntentId) return setMsg('Missing PaymentIntent id');
     try {
-      const res = await capturePaymentIntent({ paymentIntentId: challenge.paymentIntentId });
+      await capturePaymentIntent({ paymentIntentId: challenge.paymentIntentId });
       await markTransactionReleased({ txId: challenge.txId });
       await updateDoc(doc(db, 'challenges', challenge.id), { status: 'completed' });
       setMsg('Funds released and challenge completed.');
@@ -70,7 +75,7 @@ export default function ChallengeDetail() {
   const rejectProof = async () => {
     if (!challenge?.paymentIntentId) return setMsg('Missing PaymentIntent id');
     try {
-      const res = await cancelPaymentIntent({ paymentIntentId: challenge.paymentIntentId });
+      await cancelPaymentIntent({ paymentIntentId: challenge.paymentIntentId });
       await markTransactionRefunded({ txId: challenge.txId });
       await updateDoc(doc(db, 'challenges', challenge.id), { status: 'failed' });
       setMsg('Funds refunded and challenge failed.');
@@ -199,6 +204,33 @@ export default function ChallengeDetail() {
             )}
           </div>
         )}
+
+        {(isChallengee || isChallenger) && (
+          <div className="bg-gray-800 rounded p-4 space-y-3">
+            <div className="font-semibold">Add progress update</div>
+            <textarea value={progressText} onChange={(e) => setProgressText(e.target.value)} placeholder="Write an update (optional)" className="w-full px-3 py-2 bg-gray-700 rounded" rows="3" />
+            <input type="url" value={progressLink} onChange={(e) => setProgressLink(e.target.value)} placeholder="Paste a link (Instagram, TikTok, YouTube...)" className="w-full px-3 py-2 bg-gray-700 rounded" />
+            <input type="file" onChange={(e) => setProgressFile(e.target.files?.[0] || null)} />
+            <div>
+              <button onClick={async () => {
+                try {
+                  await addProgressReport(challenge.id, authUser.uid, { text: progressText, file: progressFile, externalUrl: progressLink });
+                  setProgressText('');
+                  setProgressLink('');
+                  setProgressFile(null);
+                  setMsg('Progress added');
+                } catch (err) {
+                  setMsg(err.message);
+                }
+              }} className="px-4 py-2 bg-blue-600 rounded">Add Progress Update</button>
+            </div>
+          </div>
+        )}
+
+        <div className="bg-gray-800 rounded p-4">
+          <div className="font-semibold mb-2">Progress</div>
+          <ProgressFeed challengeId={challenge.id} />
+        </div>
       </div>
     </div>
   );

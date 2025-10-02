@@ -1,6 +1,7 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const Stripe = require('stripe');
+const fetch = require('node-fetch');
 
 // Configure functions for us-central1 region
 const functionsRegion = functions.region('us-central1');
@@ -205,6 +206,84 @@ exports.finalizeSelfChallenge = functionsRegion.https.onCall(async (data, contex
   await challengeRef.update({ status: outcome === 'pass' ? 'completed' : 'failed', updatedAt: admin.firestore.FieldValue.serverTimestamp() });
 
   return { outcome, passCount, failCount, processed: txDocs.length };
+});
+
+// Generate onboarding intake suggestions via LLM (requires OPENAI_API_KEY env var)
+exports.generateIntakeSuggestions = functionsRegion.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Authentication required.');
+  }
+  const uid = context.auth.uid;
+  const answers = Array.isArray(data?.answers) ? data.answers : [];
+  if (answers.length === 0) {
+    throw new functions.https.HttpsError('invalid-argument', 'answers array required');
+  }
+
+  const db = admin.firestore();
+  // simple per-user rate limit (5s)
+  const rateRef = db.collection('aiCalls').doc(uid);
+  const rateSnap = await rateRef.get();
+  if (rateSnap.exists) {
+    const last = rateSnap.get('lastTimestamp');
+    const lastMs = last && last.toMillis ? last.toMillis() : 0;
+    if (Date.now() - lastMs < 5000) {
+      throw new functions.https.HttpsError('resource-exhausted', 'Try again in a few seconds.');
+    }
+  }
+  await rateRef.set({ lastTimestamp: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+
+  const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+  if (!OPENAI_API_KEY) {
+    throw new functions.https.HttpsError('failed-precondition', 'Missing OPENAI_API_KEY');
+  }
+
+  const userBullets = answers.map((a) => `- ${a.question || a.qId}: ${JSON.stringify(a.response)}`).join('\n');
+  const prompt = `You are given a user's intake answers below. Produce a JSON object with:\n{
+  "summaryText": "<brief empathetic summary>",
+  "suggestions": [
+    {"id":"s1","shortDesc":"...","deadlineDays":28,"suggestedStake":50,"verification":"...","prefillFields":{"type":"self","description":"...","deadline":28,"stake":50}}
+  ]
+}\nUser answers:\n${userBullets}\nConstraints: keep summaryText <= 60 words. suggestions length = 3. Output valid JSON only.`;
+
+  const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_API_KEY}` },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: 'You summarize intake and suggest 3 actionable personal challenges.' },
+        { role: 'user', content: prompt },
+      ],
+      max_tokens: 700,
+      temperature: 0.8,
+    }),
+  });
+  const json = await resp.json();
+  const text = json?.choices?.[0]?.message?.content || '{}';
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (_) {
+    parsed = {
+      summaryText: 'Starter ideas based on your selections.',
+      suggestions: [
+        { id: 's1', shortDesc: 'Walk 20 minutes daily for 2 weeks', deadlineDays: 14, suggestedStake: 20, verification: 'Upload photo or link', prefillFields: { type: 'self', description: 'Walk 20 minutes daily', deadline: 14, stake: 20 } },
+        { id: 's2', shortDesc: 'No added sugar for 2 weeks', deadlineDays: 14, suggestedStake: 30, verification: 'Text log + photo', prefillFields: { type: 'self', description: 'No added sugar', deadline: 14, stake: 30 } },
+        { id: 's3', shortDesc: 'Read 10 pages/day for 4 weeks', deadlineDays: 28, suggestedStake: 25, verification: 'Photo + note', prefillFields: { type: 'self', description: 'Read 10 pages/day', deadline: 28, stake: 25 } },
+      ],
+    };
+  }
+
+  const docRef = await db.collection('intakeResponses').add({
+    userId: uid,
+    answers,
+    aiSummary: parsed,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    source: data?.source || 'manual',
+  });
+
+  return { id: docRef.id, aiSummary: parsed };
 });
 
 // When a friend request is accepted, add each user to the other's friends list

@@ -17,6 +17,11 @@ export default function ProtectedRoute() {
     return <Navigate to="/login" replace />;
   }
 
+  // Block anonymous sessions from app routes
+  if (authUser?.isAnonymous) {
+    return <Navigate to="/onboarding" replace />;
+  }
+
   return <Outlet />;
 }
 

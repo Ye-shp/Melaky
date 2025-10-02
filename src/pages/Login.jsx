@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function Login() {
@@ -9,6 +9,7 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -16,7 +17,9 @@ export default function Login() {
     setLoading(true);
     try {
       await login(email, password);
-      navigate('/');
+      const redirectTo = location.state?.redirectTo || '/app';
+      const prefill = location.state?.prefill;
+      navigate(redirectTo, { state: prefill ? { prefill } : undefined, replace: true });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -29,7 +32,9 @@ export default function Login() {
     setLoading(true);
     try {
       await loginWithGoogle();
-      navigate('/');
+      const redirectTo = location.state?.redirectTo || '/app';
+      const prefill = location.state?.prefill;
+      navigate(redirectTo, { state: prefill ? { prefill } : undefined, replace: true });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -57,7 +62,7 @@ export default function Login() {
           <button onClick={onGoogle} disabled={loading} className="w-full py-2 bg-gray-700 hover:bg-gray-600 rounded font-medium">Continue with Google</button>
         </div>
         <div className="mt-4 text-sm text-gray-300 text-center">
-          Don’t have an account? <Link to="/register" className="text-blue-400 hover:text-blue-300">Register</Link>
+          Don’t have an account? <Link to="/register" state={location.state} className="text-blue-400 hover:text-blue-300">Register</Link>
         </div>
       </div>
     </div>

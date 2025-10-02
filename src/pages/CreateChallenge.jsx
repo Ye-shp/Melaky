@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import TopNav from '../components/TopNav';
 import { useAuth } from '../contexts/AuthContext';
 import { db, createPaymentIntent, getStripePublicKey, recordAuthorizedPayment } from '../firebase';
@@ -8,6 +9,7 @@ import { loadStripe } from '@stripe/stripe-js';
 
 export default function CreateChallenge() {
   const { authUser } = useAuth();
+  const location = useLocation();
   const [type, setType] = useState('friend');
   const [targetId, setTargetId] = useState('');
   const [description, setDescription] = useState('');
@@ -15,6 +17,20 @@ export default function CreateChallenge() {
   const [stake, setStake] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [msg, setMsg] = useState('');
+  // Apply prefill from onboarding suggestion
+  useEffect(() => {
+    const pre = location.state?.prefill;
+    if (pre) {
+      if (pre.type) setType(pre.type);
+      if (pre.description) setDescription(pre.description);
+      if (pre.deadline) {
+        const d = new Date();
+        d.setDate(d.getDate() + Number(pre.deadline));
+        setDeadline(d.toISOString().slice(0,16));
+      }
+      if (pre.stake) setStake(String(pre.stake));
+    }
+  }, [location.state]);
   const [stripePromise, setStripePromise] = useState(null);
   const [clientSecret, setClientSecret] = useState('');
   const [pendingChallengeDraft, setPendingChallengeDraft] = useState(null);

@@ -39,6 +39,17 @@ service cloud.firestore {
         allow create: if request.auth != null;
         allow update, delete: if false;
       }
+
+      // Progress reports subcollection
+      match /progressReports/{reportId} {
+        allow read: if request.auth != null;
+        // Challengee may add reports; challenger can also add comments/notes via text if desired
+        allow create: if request.auth != null && (
+          request.auth.uid == resource.data.userId ||
+          request.auth.uid == request.resource.data.userId
+        );
+        allow update, delete: if false;
+      }
     }
 
     // Transactions: read own; writes via Cloud Functions only (using Admin SDK bypasses security)
@@ -50,6 +61,12 @@ service cloud.firestore {
     // Deny all other access
     match /{document=**} {
       allow read, write: if false;
+    }
+
+    // Onboarding intake responses (server writes; user can read own)
+    match /intakeResponses/{docId} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow write: if false; // written by Cloud Functions (Admin SDK)
     }
   }
 }
