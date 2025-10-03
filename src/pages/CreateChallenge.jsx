@@ -6,6 +6,7 @@ import { db, createPaymentIntent, getStripePublicKey, recordAuthorizedPayment } 
 import { addDoc, collection, doc, documentId, getDocs, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function CreateChallenge() {
   const { authUser } = useAuth();
@@ -17,7 +18,7 @@ export default function CreateChallenge() {
   const [stake, setStake] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [msg, setMsg] = useState('');
-  // Apply prefill from onboarding suggestion
+  
   useEffect(() => {
     const pre = location.state?.prefill;
     if (pre) {
@@ -31,6 +32,7 @@ export default function CreateChallenge() {
       if (pre.stake) setStake(String(pre.stake));
     }
   }, [location.state]);
+  
   const [stripePromise, setStripePromise] = useState(null);
   const [clientSecret, setClientSecret] = useState('');
   const [pendingChallengeDraft, setPendingChallengeDraft] = useState(null);
@@ -38,7 +40,6 @@ export default function CreateChallenge() {
   const [friends, setFriends] = useState([]);
   const [loadingFriends, setLoadingFriends] = useState(false);
 
-  // Load friend IDs from the current user's profile
   React.useEffect(() => {
     if (!authUser) return;
     const unsub = onSnapshot(doc(db, 'users', authUser.uid), (snap) => {
@@ -48,7 +49,6 @@ export default function CreateChallenge() {
     return () => unsub();
   }, [authUser]);
 
-  // Load friend profiles when IDs change
   React.useEffect(() => {
     (async () => {
       setLoadingFriends(true);
@@ -63,7 +63,6 @@ export default function CreateChallenge() {
           const snap = await getDocs(q);
           snap.docs.forEach((d) => profiles.push({ id: d.id, ...d.data() }));
         }
-        // Stable order matching friendIds
         profiles.sort((a, b) => friendIds.indexOf(a.id) - friendIds.indexOf(b.id));
         setFriends(profiles);
       } finally {
@@ -94,7 +93,6 @@ export default function CreateChallenge() {
         await addDoc(collection(db, 'challenges'), challenge);
         setMsg('Self-challenge created. Use the Support section on detail page to stake.');
       } else {
-        // Friend challenge: create PaymentIntent for manual capture and present PaymentElement
         const pub = await getStripePublicKey();
         const publishableKey = pub.data.publishableKey;
         setStripePromise(loadStripe(publishableKey));
@@ -121,71 +119,175 @@ export default function CreateChallenge() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <div className="min-h-screen bg-gray-950 text-white">
       <TopNav />
-      <div className="mx-auto max-w-2xl px-4 py-6">
-        <h1 className="text-2xl font-bold mb-6">Create a Challenge</h1>
-        {msg && <div className="mb-4 text-sm text-gray-300">{msg}</div>}
-        <form onSubmit={onSubmit} className="space-y-4">
-          <div className="flex gap-4">
-            <label className="flex items-center gap-2">
-              <input type="radio" name="type" value="friend" checked={type==='friend'} onChange={() => setType('friend')} />
-              Friend challenge
-            </label>
-            <label className="flex items-center gap-2">
-              <input type="radio" name="type" value="self" checked={type==='self'} onChange={() => setType('self')} />
-              Self-challenge
-            </label>
-          </div>
-          {type === 'friend' && (
-            <div>
-              <label className="block text-sm mb-1">Select friend</label>
-              {loadingFriends ? (
-                <div className="text-sm text-gray-400">Loading friends…</div>
-              ) : friends.length > 0 ? (
-                <select value={targetId} onChange={(e) => setTargetId(e.target.value)} className="w-full px-3 py-2 bg-gray-800 rounded" required>
-                  <option value="" disabled>Select a friend…</option>
-                  {friends.map((u) => (
-                    <option key={u.id} value={u.id}>{u.username || u.email}</option>
-                  ))}
-                </select>
-              ) : (
-                <div className="text-sm text-gray-400">No friends found. Add friends first on the Friends page.</div>
-              )}
-            </div>
-          )}
-          <div>
-            <label className="block text-sm mb-1">Description</label>
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="w-full px-3 py-2 bg-gray-800 rounded" rows="3" required />
-          </div>
-          <div>
-            <label className="block text-sm mb-1">Deadline</label>
-            <input value={deadline} onChange={(e) => setDeadline(e.target.value)} type="datetime-local" className="w-full px-3 py-2 bg-gray-800 rounded" required />
-          </div>
-          <div>
-            <label className="block text-sm mb-1">Stake (USD)</label>
-            <input value={stake} onChange={(e) => setStake(e.target.value)} type="number" min="0" step="0.01" className="w-full px-3 py-2 bg-gray-800 rounded" required />
-          </div>
-          <button disabled={submitting} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded">{submitting ? 'Submitting…' : 'Create challenge'}</button>
-        </form>
+      <div className="mx-auto max-w-3xl px-6 py-12">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <h1 className="text-5xl font-bold mb-2 text-gradient-blue">Create Challenge</h1>
+          <p className="text-gray-400 text-lg mb-8">Set your goal and stake your commitment</p>
+        </motion.div>
 
-        {stripePromise && clientSecret && pendingChallengeDraft && (
-          <div className="mt-8 bg-gray-800 rounded p-4">
-            <div className="font-semibold mb-2">Authorize payment</div>
-            <Elements stripe={stripePromise} options={{ clientSecret }}>
-              <PaymentAuthorization
-                draft={pendingChallengeDraft}
-                onComplete={() => {
-                  setPendingChallengeDraft(null);
-                  setClientSecret('');
-                  setStripePromise(null);
-                  setMsg('Challenge created and payment authorized.');
-                }}
-                onError={(m) => setMsg(m)}
+        <AnimatePresence>
+          {msg && (
+            <motion.div
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 10 }}
+              className="mb-6 p-4 rounded-2xl glass-strong text-gray-300 text-sm"
+            >
+              {msg}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <motion.form
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.1 }}
+          onSubmit={onSubmit}
+          className="space-y-6"
+        >
+          <div className="glass-strong rounded-3xl p-8 space-y-6">
+            <div className="flex gap-4">
+              {['friend', 'self'].map((t, i) => (
+                <motion.label
+                  key={t}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.2 + i * 0.05 }}
+                  className={`flex-1 flex items-center justify-center gap-3 px-6 py-4 rounded-2xl cursor-pointer transition-all ${
+                    type === t 
+                      ? 'bg-gradient-to-r from-blue-600 to-purple-600 shadow-xl' 
+                      : 'glass hover:glass-strong'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="type"
+                    value={t}
+                    checked={type === t}
+                    onChange={() => setType(t)}
+                    className="sr-only"
+                  />
+                  <span className="font-semibold capitalize">{t} challenge</span>
+                </motion.label>
+              ))}
+            </div>
+
+            <AnimatePresence mode="wait">
+              {type === 'friend' && (
+                <motion.div
+                  key="friend-select"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <label className="block text-sm font-medium mb-2 text-gray-300">Select friend</label>
+                  {loadingFriends ? (
+                    <div className="text-sm text-gray-400 p-4 glass rounded-2xl">Loading friends...</div>
+                  ) : friends.length > 0 ? (
+                    <select
+                      value={targetId}
+                      onChange={(e) => setTargetId(e.target.value)}
+                      className="w-full px-4 py-3 glass rounded-xl outline-none focus:ring-2 focus:ring-blue-500/50 transition-all text-white"
+                      required
+                    >
+                      <option value="" disabled>Select a friend...</option>
+                      {friends.map((u) => (
+                        <option key={u.id} value={u.id}>{u.username || u.email}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="text-sm text-gray-400 p-4 glass rounded-2xl">
+                      No friends found. Add friends first on the Friends page.
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <div>
+              <label className="block text-sm font-medium mb-2 text-gray-300">Description</label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="w-full px-4 py-3 glass rounded-xl outline-none focus:ring-2 focus:ring-blue-500/50 transition-all text-white placeholder-gray-500 resize-none"
+                rows="4"
+                placeholder="Describe your challenge..."
+                required
               />
-            </Elements>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium mb-2 text-gray-300">Deadline</label>
+                <input
+                  value={deadline}
+                  onChange={(e) => setDeadline(e.target.value)}
+                  type="datetime-local"
+                  className="w-full px-4 py-3 glass rounded-xl outline-none focus:ring-2 focus:ring-blue-500/50 transition-all text-white"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2 text-gray-300">Stake (USD)</label>
+                <input
+                  value={stake}
+                  onChange={(e) => setStake(e.target.value)}
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  className="w-full px-4 py-3 glass rounded-xl outline-none focus:ring-2 focus:ring-blue-500/50 transition-all text-white"
+                  placeholder="0.00"
+                  required
+                />
+              </div>
+            </div>
+
+            <motion.button
+              type="submit"
+              disabled={submitting}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="w-full py-4 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl font-semibold text-lg shadow-xl hover:shadow-2xl transition-shadow disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {submitting ? 'Creating...' : 'Create challenge'}
+            </motion.button>
           </div>
-        )}
+        </motion.form>
+
+        <AnimatePresence>
+          {stripePromise && clientSecret && pendingChallengeDraft && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="mt-8 glass-strong rounded-3xl p-8"
+            >
+              <h3 className="text-2xl font-bold mb-6">Authorize payment</h3>
+              <Elements stripe={stripePromise} options={{ clientSecret }}>
+                <PaymentAuthorization
+                  draft={pendingChallengeDraft}
+                  onComplete={() => {
+                    setPendingChallengeDraft(null);
+                    setClientSecret('');
+                    setStripePromise(null);
+                    setMsg('Challenge created and payment authorized.');
+                  }}
+                  onError={(m) => setMsg(m)}
+                />
+              </Elements>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
@@ -234,13 +336,17 @@ function PaymentAuthorization({ draft, onComplete, onError }) {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <PaymentElement />
-      <button disabled={processing || !stripe} onClick={confirmAndSave} className="px-4 py-2 bg-blue-600 rounded">
-        {processing ? 'Authorizing…' : 'Authorize'}
-      </button>
+      <motion.button
+        disabled={processing || !stripe}
+        onClick={confirmAndSave}
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
+        className="w-full py-4 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl font-semibold text-lg shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {processing ? 'Authorizing...' : 'Authorize'}
+      </motion.button>
     </div>
   );
 }
-
-

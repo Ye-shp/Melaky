@@ -10,6 +10,7 @@ import { loadStripe } from '@stripe/stripe-js';
 import { createPaymentIntent, getStripePublicKey, recordAuthorizedPayment } from '../firebase';
 import ProgressFeed from '../components/ProgressFeed';
 import { addProgressReport } from '../services/progressService';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function ChallengeDetail() {
   const { id } = useParams();
@@ -122,71 +123,167 @@ export default function ChallengeDetail() {
     }
   };
 
-  if (loading) return (
-    <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">Loading…</div>
-  );
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+          className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full"
+        />
+      </div>
+    );
+  }
 
-  if (!challenge) return (
-    <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">Not found</div>
-  );
+  if (!challenge) {
+    return (
+      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-center"
+        >
+          <div className="text-6xl mb-4">🤔</div>
+          <h2 className="text-2xl font-bold">Challenge not found</h2>
+        </motion.div>
+      </div>
+    );
+  }
+
+  const statusColors = {
+    active: 'from-green-500/20 to-emerald-500/20 border-green-500/30',
+    pending: 'from-yellow-500/20 to-orange-500/20 border-yellow-500/30',
+    completed: 'from-blue-500/20 to-purple-500/20 border-blue-500/30',
+    awaiting_verification: 'from-purple-500/20 to-pink-500/20 border-purple-500/30',
+    failed: 'from-red-500/20 to-pink-500/20 border-red-500/30'
+  };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <div className="min-h-screen bg-gray-950 text-white">
       <TopNav />
-      <div className="mx-auto max-w-3xl px-4 py-6 space-y-4">
-        <h1 className="text-2xl font-bold">Challenge</h1>
-        {msg && <div className="text-sm text-gray-300">{msg}</div>}
-        <div className="bg-gray-800 rounded p-4">
-          <div className="text-gray-300">{challenge.description}</div>
-          <div className="text-sm text-gray-400 mt-2">Stake: ${(challenge.potAmount / 100).toFixed(2)}</div>
-          <div className="text-sm text-gray-400">Status: {challenge.status}</div>
-          {challenge.proofUrl && (
-            <div className="mt-2"><a className="text-blue-400" href={challenge.proofUrl} target="_blank" rel="noreferrer">View Proof</a></div>
+      <div className="mx-auto max-w-4xl px-6 py-12 space-y-6">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+        >
+          <h1 className="text-5xl font-bold mb-2 text-gradient-blue">Challenge Detail</h1>
+          <p className="text-gray-400 text-lg">Track your progress and manage your challenge</p>
+        </motion.div>
+
+        <AnimatePresence>
+          {msg && (
+            <motion.div
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 10 }}
+              className="p-4 rounded-2xl glass-strong text-gray-300 text-sm"
+            >
+              {msg}
+            </motion.div>
           )}
-        </div>
+        </AnimatePresence>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.1 }}
+          className={`glass-strong rounded-3xl p-8 border-2 ${statusColors[challenge.status] || statusColors.active}`}
+        >
+          <div className="flex items-start justify-between mb-6">
+            <div>
+              <span className="px-4 py-2 rounded-full text-xs font-semibold glass inline-block mb-4">
+                {challenge.type === 'self' ? 'Self' : 'Friend'} Challenge
+              </span>
+              <p className="text-2xl font-medium text-white leading-relaxed">{challenge.description}</p>
+            </div>
+            <motion.div
+              animate={{ scale: [1, 1.2, 1] }}
+              transition={{ duration: 2, repeat: Infinity }}
+              className="w-3 h-3 rounded-full bg-gradient-to-r from-blue-500 to-purple-600"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="glass rounded-2xl p-4">
+              <div className="text-sm text-gray-400 mb-1">Stake</div>
+              <div className="text-2xl font-bold">${(challenge.potAmount / 100).toFixed(2)}</div>
+            </div>
+            <div className="glass rounded-2xl p-4">
+              <div className="text-sm text-gray-400 mb-1">Status</div>
+              <div className="text-2xl font-bold capitalize">{challenge.status.replace('_', ' ')}</div>
+            </div>
+          </div>
+
+          {challenge.proofUrl && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="mt-6"
+            >
+              <a
+                href={challenge.proofUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 text-blue-400 hover:text-blue-300 font-medium"
+              >
+                View Proof
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </a>
+            </motion.div>
+          )}
+        </motion.div>
 
         {isChallengee && challenge.status === 'active' && (
-          <div className="bg-gray-800 rounded p-4 space-y-2">
-            <div className="font-semibold">Submit proof</div>
-            <input type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} />
-            <button onClick={submitProof} className="px-4 py-2 bg-blue-600 rounded">Upload</button>
-          </div>
+          <ActionCard title="Submit proof">
+            <input
+              type="file"
+              onChange={(e) => setFile(e.target.files?.[0] || null)}
+              className="w-full px-4 py-3 glass rounded-xl text-white file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-500"
+            />
+            <ActionButton onClick={submitProof}>Upload Proof</ActionButton>
+          </ActionCard>
         )}
 
         {isChallenger && challenge.status === 'awaiting_verification' && (
-          <div className="bg-gray-800 rounded p-4 space-y-2">
-            <div className="font-semibold">Verify proof</div>
-            <div className="flex gap-2">
-              <button onClick={approveProof} className="px-4 py-2 bg-green-600 rounded">Approve</button>
-              <button onClick={rejectProof} className="px-4 py-2 bg-red-600 rounded">Reject</button>
+          <ActionCard title="Verify proof">
+            <div className="flex gap-3">
+              <ActionButton onClick={approveProof} variant="success">Approve</ActionButton>
+              <ActionButton onClick={rejectProof} variant="danger">Reject</ActionButton>
             </div>
-          </div>
+          </ActionCard>
         )}
 
         {isSelf && challenge.status === 'awaiting_verification' && (
-          <div className="bg-gray-800 rounded p-4 space-y-2">
-            <div className="font-semibold">Community voting</div>
-            <div className="flex gap-2">
-              <button onClick={() => vote('pass')} className="px-4 py-2 bg-green-600 rounded">Pass</button>
-              <button onClick={() => vote('fail')} className="px-4 py-2 bg-red-600 rounded">Fail</button>
+          <ActionCard title="Community voting">
+            <div className="flex gap-3 mb-4">
+              <ActionButton onClick={() => vote('pass')} variant="success">Pass</ActionButton>
+              <ActionButton onClick={() => vote('fail')} variant="danger">Fail</ActionButton>
             </div>
             {isChallenger && (
-              <div className="pt-2">
-                <button onClick={finalizeSelf} className="px-4 py-2 bg-blue-600 rounded">Finalize by votes</button>
-              </div>
+              <ActionButton onClick={finalizeSelf}>Finalize by votes</ActionButton>
             )}
-          </div>
+          </ActionCard>
         )}
 
         {isSelf && challenge.status === 'active' && (
-          <div className="bg-gray-800 rounded p-4 space-y-3">
-            <div className="font-semibold">Support this self-challenge</div>
-            <div className="flex gap-2">
-              <input type="number" min="0" step="0.01" value={supportAmount} onChange={(e) => setSupportAmount(e.target.value)} className="px-3 py-2 bg-gray-700 rounded" placeholder="Amount (USD)" />
-              <button onClick={startSupport} className="px-4 py-2 bg-blue-600 rounded">Support</button>
+          <ActionCard title="Support this challenge">
+            <div className="flex gap-3 mb-4">
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={supportAmount}
+                onChange={(e) => setSupportAmount(e.target.value)}
+                className="flex-1 px-4 py-3 glass rounded-xl outline-none focus:ring-2 focus:ring-blue-500/50 text-white"
+                placeholder="Amount (USD)"
+              />
+              <ActionButton onClick={startSupport}>Support</ActionButton>
             </div>
             {supporting && stripePromise && clientSecret && (
-              <div className="bg-gray-900 rounded p-4">
+              <div className="glass rounded-2xl p-6">
                 <Elements stripe={stripePromise} options={{ clientSecret }}>
                   <SupportPayment onDone={async (paymentIntent) => {
                     try {
@@ -202,17 +299,32 @@ export default function ChallengeDetail() {
                 </Elements>
               </div>
             )}
-          </div>
+          </ActionCard>
         )}
 
         {(isChallengee || isChallenger) && (
-          <div className="bg-gray-800 rounded p-4 space-y-3">
-            <div className="font-semibold">Add progress update</div>
-            <textarea value={progressText} onChange={(e) => setProgressText(e.target.value)} placeholder="Write an update (optional)" className="w-full px-3 py-2 bg-gray-700 rounded" rows="3" />
-            <input type="url" value={progressLink} onChange={(e) => setProgressLink(e.target.value)} placeholder="Paste a link (Instagram, TikTok, YouTube...)" className="w-full px-3 py-2 bg-gray-700 rounded" />
-            <input type="file" onChange={(e) => setProgressFile(e.target.files?.[0] || null)} />
-            <div>
-              <button onClick={async () => {
+          <ActionCard title="Add progress update">
+            <div className="space-y-4">
+              <textarea
+                value={progressText}
+                onChange={(e) => setProgressText(e.target.value)}
+                placeholder="Write an update (optional)"
+                className="w-full px-4 py-3 glass rounded-xl outline-none focus:ring-2 focus:ring-blue-500/50 text-white placeholder-gray-500 resize-none"
+                rows="3"
+              />
+              <input
+                type="url"
+                value={progressLink}
+                onChange={(e) => setProgressLink(e.target.value)}
+                placeholder="Paste a link (Instagram, TikTok, YouTube...)"
+                className="w-full px-4 py-3 glass rounded-xl outline-none focus:ring-2 focus:ring-blue-500/50 text-white placeholder-gray-500"
+              />
+              <input
+                type="file"
+                onChange={(e) => setProgressFile(e.target.files?.[0] || null)}
+                className="w-full px-4 py-3 glass rounded-xl text-white file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-500"
+              />
+              <ActionButton onClick={async () => {
                 try {
                   await addProgressReport(challenge.id, authUser.uid, { text: progressText, file: progressFile, externalUrl: progressLink });
                   setProgressText('');
@@ -222,17 +334,54 @@ export default function ChallengeDetail() {
                 } catch (err) {
                   setMsg(err.message);
                 }
-              }} className="px-4 py-2 bg-blue-600 rounded">Add Progress Update</button>
+              }}>Add Progress Update</ActionButton>
             </div>
-          </div>
+          </ActionCard>
         )}
 
-        <div className="bg-gray-800 rounded p-4">
-          <div className="font-semibold mb-2">Progress</div>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.3 }}
+          className="glass-strong rounded-3xl p-8"
+        >
+          <h2 className="text-2xl font-bold mb-6">Progress Feed</h2>
           <ProgressFeed challengeId={challenge.id} />
-        </div>
+        </motion.div>
       </div>
     </div>
+  );
+}
+
+function ActionCard({ title, children }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="glass-strong rounded-3xl p-8"
+    >
+      <h3 className="text-xl font-bold mb-6">{title}</h3>
+      {children}
+    </motion.div>
+  );
+}
+
+function ActionButton({ onClick, children, variant = 'primary' }) {
+  const variants = {
+    primary: 'bg-gradient-to-r from-blue-600 to-purple-600',
+    success: 'bg-green-600 hover:bg-green-500',
+    danger: 'bg-red-600 hover:bg-red-500'
+  };
+
+  return (
+    <motion.button
+      onClick={onClick}
+      whileHover={{ scale: 1.02 }}
+      whileTap={{ scale: 0.98 }}
+      className={`px-6 py-3 rounded-xl font-semibold shadow-xl transition-all ${variants[variant]}`}
+    >
+      {children}
+    </motion.button>
   );
 }
 
@@ -257,11 +406,17 @@ function SupportPayment({ onDone, onError }) {
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <PaymentElement />
-      <button onClick={confirm} disabled={processing} className="px-4 py-2 bg-blue-600 rounded">{processing ? 'Authorizing…' : 'Authorize'}</button>
+      <motion.button
+        onClick={confirm}
+        disabled={processing}
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
+        className="w-full px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl font-semibold shadow-xl disabled:opacity-50"
+      >
+        {processing ? 'Authorizing...' : 'Authorize'}
+      </motion.button>
     </div>
   );
 }
-
-
